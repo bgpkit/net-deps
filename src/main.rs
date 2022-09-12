@@ -17,19 +17,16 @@ struct Cli {
     /// Date to check
     date: NaiveDate,
 
+    /// Date until
+    until: Option<NaiveDate>,
+
     #[clap(short, long)]
     debug: bool,
 }
 
-fn main() {
-    let cli = Cli::parse();
-    let date: NaiveDate = cli.date;
+fn process_date(origin_asn: &i64, date: &NaiveDate) {
     let datetime_str = date.and_time(Default::default()).timestamp().to_string();
-
-    if cli.debug {
-        tracing_subscriber::fmt().init();
-    }
-
+    info!("processing dependency data for AS{} of {}", origin_asn, date);
 
     let broker = BgpkitBroker::new_with_params("https://api.broker.bgpkit.com/v2", QueryParams{
         ts_start: Some(datetime_str.clone()),
@@ -41,7 +38,7 @@ fn main() {
 
     let items: Vec<BrokerItem> = broker.into_iter().collect();
 
-    let origin_asn_str: String = cli.origin_asn.to_string();
+    let origin_asn_str: String = origin_asn.to_string();
 
     let elems: Vec<BgpElem> = items.par_iter().flat_map(|item| {
         info!("start parsing {}", item.url.as_str());
@@ -63,7 +60,7 @@ fn main() {
         });
     }
 
-    let mut writer = oneio::get_writer(format!("{}-{}.csv", cli.origin_asn, cli.date).as_str()).unwrap();
+    let mut writer = oneio::get_writer(format!("{}-{}.csv", origin_asn, date).as_str()).unwrap();
     let mut hash_vec: Vec<(i64, usize)> = as_hop_count.into_iter().collect();
     hash_vec.sort_by(|a, b| b.1.cmp(&a.1));
     hash_vec.iter().for_each(|(asn, count)|{
@@ -71,4 +68,28 @@ fn main() {
         write!(writer, "{},{},{:.2}\n", asn, count, percentage).unwrap();
     });
     writer.flush().unwrap();
+
+}
+
+fn main() {
+    let cli = Cli::parse();
+    if cli.debug {
+        tracing_subscriber::fmt().init();
+    }
+
+    let until: NaiveDate = match cli.until {
+        None => cli.date.clone(),
+        Some(d) => d,
+    };
+    assert!( until >= cli.date);
+
+    let mut d: NaiveDate = cli.date;
+    let origin_asn: i64 = cli.origin_asn;
+    loop {
+        process_date(&origin_asn, &d);
+        d = d + chrono::Duration::days(1);
+        if d >= until {
+            break
+        }
+    }
 }
