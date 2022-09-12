@@ -57,7 +57,7 @@ fn main() {
     let total_paths_count = uniq_paths.len();
     let mut as_hop_count: HashMap<i64, usize> = HashMap::new();
     for path in uniq_paths {
-        let hops = path.split(',').collect::<Vec<&str>>().into_iter().map(|hop|{hop.parse::<i64>().unwrap()}).collect::<HashSet<i64>>();
+        let hops = path.split(' ').collect::<Vec<&str>>().into_iter().map(|hop|{hop.parse::<i64>().unwrap()}).collect::<HashSet<i64>>();
         hops.into_iter() .for_each(|hop|{
             as_hop_count.entry(hop).and_modify(|count| *count+=1).or_insert(1);
         });
@@ -68,7 +68,7 @@ fn main() {
     hash_vec.sort_by(|a, b| b.1.cmp(&a.1));
     hash_vec.iter().for_each(|(asn, count)|{
         let percentage = (*count as f64) / (total_paths_count as f64);
-        write!(writer, "{},{},{}\n", asn, count, percentage).unwrap();
+        write!(writer, "{},{},{:.2}\n", asn, count, percentage).unwrap();
     });
     writer.flush().unwrap();
 }
