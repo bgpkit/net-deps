@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::io::Write;
 use bgpkit_broker::{BgpkitBroker, BrokerItem, QueryParams};
 use bgpkit_parser::{BgpElem, BgpkitParser};
 use chrono::NaiveDate;
@@ -33,7 +34,7 @@ fn main() {
     let broker = BgpkitBroker::new_with_params("https://api.broker.bgpkit.com/v2", QueryParams{
         ts_start: Some(datetime_str.clone()),
         ts_end: Some(datetime_str.clone()),
-        collector_id: Some("rrc00".to_string()),
+        // collector_id: Some("rrc00".to_string()),
         data_type: Some("rib".to_string()),
         ..Default::default()
     });
@@ -45,8 +46,7 @@ fn main() {
     let elems: Vec<BgpElem> = items.par_iter().flat_map(|item| {
         info!("start parsing {}", item.url.as_str());
         let parser = BgpkitParser::new(item.url.as_str()).unwrap()
-            .add_filter("origin_asn", origin_asn_str.as_str()).unwrap()
-            .add_filter("type", "a").unwrap();
+            .add_filter("origin_asn", origin_asn_str.as_str()).unwrap();
         parser.into_elem_iter().collect::<Vec<BgpElem>>()
     }).collect();
 
@@ -63,10 +63,12 @@ fn main() {
         });
     }
 
+    let mut writer = oneio::get_writer(format!("{}-{}.csv", cli.origin_asn, cli.date).as_str()).unwrap();
     let mut hash_vec: Vec<(i64, usize)> = as_hop_count.into_iter().collect();
     hash_vec.sort_by(|a, b| b.1.cmp(&a.1));
     hash_vec.iter().for_each(|(asn, count)|{
         let percentage = (*count as f64) / (total_paths_count as f64);
-        println!("{},{},{}", asn, count, percentage);
-    })
+        write!(writer, "{},{},{}\n", asn, count, percentage).unwrap();
+    });
+    writer.flush().unwrap();
 }
